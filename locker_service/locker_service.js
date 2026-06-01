@@ -21,6 +21,7 @@ var db = new sqlite3.Database('./dados.db', (err) => {
             console.log('ERRO: não foi possível conectar ao SQLite.');
             throw err;
         }
+        db.run('PRAGMA foreign_keys = ON');
         console.log('Conectado ao SQLite!');
     });
 
@@ -139,16 +140,22 @@ app.get('/lockers/:codigo/gavetas', (req, res) => {
 
 app.delete('/lockers/:codigo', (req, res) => {
     const codigo = req.params.codigo;
-    db.run(`DELETE FROM lockers WHERE codigo = ?`, [codigo], function(err) {
+    db.run(`DELETE FROM gavetas WHERE locker = ?`, [codigo], function(err) {
         if (err) {
             console.log('Error:', err);
-            return res.status(500).send('Erro ao deletar locker.');
+            return res.status(500).send('Erro ao deletar gavetas do locker.');
         }
-        if (this.changes === 0) {
-            return res.status(404).send('Locker não encontrado.');
-        }
-        return res.status(200).send('Locker deletado com sucesso.');
-    }); 
+        db.run(`DELETE FROM lockers WHERE codigo = ?`, [codigo], function(err) {
+            if (err) {
+                console.log('Error:', err);
+                return res.status(500).send('Erro ao deletar locker.');
+            }
+            if (this.changes === 0) {
+                return res.status(404).send('Locker não encontrado.');
+            }
+            return res.status(200).send('Locker deletado com sucesso.');
+        });
+    });
 });
 
 // {
