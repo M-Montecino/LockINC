@@ -1,5 +1,6 @@
 const express = require('express');
 const app = express();
+const sqlite3 = require('sqlite3');
 
 // Body Parser - usado para processar dados da requisição HTTP
 const bodyParser = require('body-parser');
@@ -12,9 +13,6 @@ app.listen(porta, () => {
  console.log('Servidor em execução na porta: ' + porta);
 });
 
-// Importa o package do SQLite
-const sqlite3 = require('sqlite3');
-
 // Acessa o arquivo com o banco de dados
 var db = new sqlite3.Database('./dados.db', (err) => {
         if (err) {
@@ -25,18 +23,12 @@ var db = new sqlite3.Database('./dados.db', (err) => {
         console.log('Conectado ao SQLite!');
     });
 
-const runAsync = (sql, params = []) =>
-  new Promise((resolve, reject) => {
-    db.run(sql, params, function (err) {
-      if (err) reject(err);
-      else resolve(this);
-    });
-  });
-
 //DB
 db.run(`CREATE TABLE IF NOT EXISTS lockers
-        ( endereco TEXT NOT NULL,
-          codigo INTEGER PRIMARY KEY NOT NULL UNIQUE)`, 
+        (codigo INTEGER PRIMARY KEY NOT NULL UNIQUE,
+        cep numeric[8] NOT NULL,
+        numero_cep integer NOT NULL,
+        complemento TEXT)`, 
         [], (err) => {
            if (err) {
               console.log('ERRO: não foi possível criar tabela.');
@@ -45,10 +37,9 @@ db.run(`CREATE TABLE IF NOT EXISTS lockers
       });
 
 db.run(`CREATE TABLE IF NOT EXISTS gavetas(
-            locker INTEGER,
-            tamanho TEXT NOT NULL CHECK(tamanho IN ('P', 'M', 'G', 'GG')),
             numero INTEGER PRIMARY KEY AUTOINCREMENT,
-            ocupado BOOLEAN NOT NULL DEFAULT 0,
+            locker INTEGER NOT NULL,
+            tamanho TEXT NOT NULL CHECK(tamanho IN ('P', 'M', 'G', 'GG')),
             FOREIGN KEY(locker) REFERENCES lockers(codigo)
         )`,
     [], (err) => {
@@ -60,47 +51,58 @@ db.run(`CREATE TABLE IF NOT EXISTS gavetas(
 
 // Método HTTP POST /Locker- cadastra um novo locker
 app.post('/lockers', async (req, res) => {
-    if (!req.body.endereco || !req.body.codigo || !req.body.gavetas) {
-        return res.status(400).send('Dados incompletos. Por favor, forneça endereço, código e gavetas.');
+    const { codigo, cep, numero_cep, complemento, gavetas } = req.body;
+
+    if (!cep || !numero_cep || !codigo || !gavetas) {
+        return res.status(400).send('Dados incompletos. Por favor, forneça CEP, número do CEP, código e gavetas.');
     }
-    if (req.body.gavetas.P < 0 || req.body.gavetas.M < 0 || req.body.gavetas.G < 0 || req.body.gavetas.GG < 0) {
+    if (gavetas.P < 0 || gavetas.M < 0 || gavetas.G < 0 || gavetas.GG < 0) {
         return res.status(400).send('Número de gavetas não pode ser negativo.');
     }
-    if (req.body.gavetas.P + req.body.gavetas.M + req.body.gavetas.G + req.body.gavetas.GG === 0) {
+    if (gavetas.P + gavetas.M + gavetas.G + gavetas.GG === 0) {
         return res.status(400).send('O locker deve ter pelo menos uma gaveta.');
     }
-    try {
-    await runAsync(
-        `INSERT INTO lockers(endereco, codigo) VALUES(?,?)`,
-        [req.body.endereco, req.body.codigo]
+
+    db.run(
+        'INSERT INTO lockers(cep, numero_cep, complemento, codigo) VALUES (?, ?, ?, ?)',
+        [cep, numero_cep, complemento, codigo],
+        (err) => {
+            if (err) {
+                console.log(err);
+                return res.status(500).send('Erro ao cadastrar locker.');
+            }
+
+            for (let i = 0; i < gavetas.P; i++) {
+                db.run(
+                    'INSERT INTO gavetas(locker, tamanho) VALUES (?, ?)',
+                    [codigo, 'P']
+                );
+            }
+
+            for (let i = 0; i < gavetas.M; i++) {
+                db.run(
+                    'INSERT INTO gavetas(locker, tamanho) VALUES (?, ?)',
+                    [codigo, 'M']
+                );
+            }
+
+            for (let i = 0; i < gavetas.G; i++) {
+                db.run(
+                    'INSERT INTO gavetas(locker, tamanho) VALUES (?, ?)',
+                    [codigo, 'G']
+                );
+            }
+
+            for (let i = 0; i < gavetas.GG; i++) {
+                db.run(
+                    'INSERT INTO gavetas(locker, tamanho) VALUES (?, ?)',
+                    [codigo, 'GG']
+                );
+            }
+
+            res.status(201).send('Locker cadastrado com sucesso.');
+        }
     );
-
-    const tarefas = [];
-
-
-    for (let i = 0; i < req.body.gavetas.P; i++) {
-        tarefas.push(runAsync(`INSERT INTO gavetas(locker, tamanho) VALUES(?,?)`, [req.body.codigo, 'P']));
-    }
-
-    for (let i = 0; i < req.body.gavetas.M; i++) {
-        tarefas.push(runAsync(`INSERT INTO gavetas(locker, tamanho) VALUES(?,?)`, [req.body.codigo, 'M']));
-    }
-
-    for (let i = 0; i < req.body.gavetas.G; i++) {
-        tarefas.push(runAsync(`INSERT INTO gavetas(locker, tamanho) VALUES(?,?)`, [req.body.codigo, 'G']));
-    }
-
-    for (let i = 0; i < req.body.gavetas.GG; i++) {
-        tarefas.push(runAsync(`INSERT INTO gavetas(locker, tamanho) VALUES(?,?)`, [req.body.codigo, 'GG']));
-    }
-
-    await Promise.all(tarefas);
-
-    return res.status(201).send('Locker cadastrado com sucesso.');
-    } catch (err) {
-    console.log('Error:', err);
-    return res.status(500).send('Erro ao cadastrar locker.');
-    }
 });
 
 app.get('/lockers', (req, res) => {
@@ -159,12 +161,14 @@ app.delete('/lockers/:codigo', (req, res) => {
 });
 
 // {
-//     "codigo_locker": 123,
-//     "endereco": "Rua das Flores, 123",
-//     "gavetas": {
-//         "P": 10,
-//         "M": 5,
-//         "G": 2,
-//         "GG": 1
+//      "codigo": 123,
+//      "cep": 88040480,
+//      "numero_cep": 12345,
+//      "complemento": "APTO 203",
+//      "gavetas": {
+//          "P": 10,
+//          "M": 5,
+//          "G": 2,
+//          "GG": 1
 //     }
 // }
