@@ -9,6 +9,8 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({extended: true}));
 
 const ABERTURA_SERVICE = 'http://localhost:8120';
+const LOCKER_SERVICE = 'http://localhost:8110';
+const CONDOMINO_SERVICE = 'http://localhost:8080';
 
 // Inicia o Servidor na porta 8090
 let porta = 8090;
@@ -32,7 +34,8 @@ db.run(`CREATE TABLE IF NOT EXISTS entregas
         cpf numeric[11] NOT NULL UNIQUE,
         locker INTEGER NOT NULL,
         numero_gaveta INTEGER NOT NULL,
-        data_entrega DATETIME NOT NULL)`, 
+        data_entrega DATETIME NOT NULL,
+        UNIQUE(locker, numero_gaveta))`, 
     [], (err) => {
         if (err) {
             console.log('ERRO: não foi possível criar tabela.');
@@ -49,19 +52,54 @@ app.post('/entregas', async (req, res) => {
     }
     if (cpf.length !== 11) {
         return res.status(400).send('CPF deve conter exatamente 11 dígitos.');
-     }
-    
-    db.run(
-        'INSERT INTO entregas(cpf, locker, numero_gaveta, data_entrega) VALUES (?, ?, ?, ?)',
-        [cpf, locker, numero_gaveta, data_entrega],
-        (err) => {
-            if (err) {
-                console.log(err);
-                return res.status(500).send('Erro ao cadastrar entrega.');
-            }
-            res.status(201).send('Entrega cadastrada com sucesso.');
+    }
+
+    try {
+        // Verifica se o CPF é um condômino válido
+        const condominoResult = await axios.get(`${CONDOMINO_SERVICE}/condominos/${cpf}`,
+            { validateStatus: () => true }
+        );
+
+        if (condominoResult.status === 404) {
+            return res.status(404).send('CPF não cadastrado como condômino no sistema.');
         }
-    );
+
+        // Verifica se o locker e a gaveta existem
+        const gacetasResult = await axios.get(`${LOCKER_SERVICE}/lockers/${locker}/gavetas`, 
+            { validateStatus: () => true }
+        );
+
+        if (gacetasResult.status === 404) {
+            return res.status(404).send('Locker não encontrado');
+        }
+
+        // Verifica se a gaveta específica existe
+        const gavetas = gacetasResult.data;
+        const gavetaExiste = gavetas.some(g => g.numero === numero_gaveta);
+
+        if (!gavetaExiste) {
+            return res.status(404).send('Gaveta não existe neste locker.');
+        }
+
+        // Se tudo existir, registra a entrega
+        db.run(
+            'INSERT INTO entregas(cpf, locker, numero_gaveta, data_entrega) VALUES (?, ?, ?, ?)',
+            [cpf, locker, numero_gaveta, data_entrega],
+            (err) => {
+                if (err) {
+                    console.log(err);
+                    if (err.message.includes('UNIQUE constraint failed')) {
+                        return res.status(400).send('Esta gaveta ou cliente já possui uma entrega. Escolha outra gaveta.');
+                    }
+                    return res.status(500).send('Erro ao cadastrar entrega.');
+                }
+                res.status(201).send('Entrega cadastrada com sucesso.');
+            }
+        );
+    } catch (err) {
+        console.log(err);
+        res.status(500).send('Erro ao verificar disponibilidade da gaveta.');
+    }
 });
 
 // GET
