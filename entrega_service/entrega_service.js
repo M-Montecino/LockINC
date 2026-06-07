@@ -1,11 +1,14 @@
 const express = require('express');
 const app = express();
 const sqlite3 = require('sqlite3');
+const axios = require('axios');
 
 // Body Parser - usado para processar dados da requisição HTTP
 const bodyParser = require('body-parser');
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({extended: true}));
+
+const ABERTURA_SERVICE = 'http://localhost:8120';
 
 // Inicia o Servidor na porta 8090
 let porta = 8090;
@@ -25,7 +28,8 @@ var db = new sqlite3.Database('./dados.db', (err) => {
 
 //DB
 db.run(`CREATE TABLE IF NOT EXISTS entregas
-        (cpf numeric[11] PRIMARY KEY NOT NULL UNIQUE,
+        (id INTEGER PRIMARY KEY AUTOINCREMENT,
+        cpf numeric[11] NOT NULL UNIQUE,
         locker INTEGER NOT NULL,
         numero_gaveta INTEGER NOT NULL,
         data_entrega DATETIME NOT NULL)`, 
@@ -94,21 +98,43 @@ app.delete('/entregas/:cpf', async (req, res) => {
     if (cpf.length !== 11) {
         return res.status(400).send('CPF deve conter exatamente 11 dígitos.');
      }
-    db.run('DELETE FROM entregas WHERE cpf = ?', [cpf], function(err) {
+
+    db.get('SELECT * FROM entregas WHERE cpf = ?', [cpf], (err, row) => {
         if (err) {
             console.log(err);
-            return res.status(500).send('Erro ao deletar entrega.');
+            return res.status(500).send('Erro ao buscar entrega.');
         }
-        if (this.changes === 0) {
+        if (!row) {
             return res.status(404).send('Entrega não encontrada para o CPF fornecido.');
         }
-        res.status(200).send('Entrega deletada com sucesso.');
+
+        (async () => {
+            try {
+                const aberturaResult = await axios.post(`${ABERTURA_SERVICE}/abertura`, {
+                    cpf: cpf,
+                    locker: row.locker,
+                    numero_gaveta: row.numero_gaveta,
+                    data_retirada: new Date().toISOString()
+                }, { validateStatus: () => true });
+
+                if (aberturaResult.status !== 200) {
+                    return res.status(500).send('Erro ao abrir gaveta.');
+                }
+            } catch (openErr) {
+                console.log(openErr);
+                return res.status(500).send('Erro ao abrir gaveta.');
+            }
+
+            db.run('DELETE FROM entregas WHERE cpf = ?', [cpf], function(deleteErr) {
+                if (deleteErr) {
+                    console.log(deleteErr);
+                    return res.status(500).send('Erro ao deletar entrega.');
+                }
+                if (this.changes === 0) {
+                    return res.status(404).send('Entrega não encontrada para o CPF fornecido.');
+                }
+                res.status(200).send('Entrega deletada com sucesso.');
+            });
+        })();
     });
 });
-
-// {
-//     "cpf": "12345678901",
-//     "locker": 123,
-//     "numero_gaveta": 1,
-//     "data_entrega": "2024-06-01T10:00:00Z"
-// }

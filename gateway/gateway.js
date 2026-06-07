@@ -121,12 +121,11 @@ app.delete('/condomino/:cpf/recolher', async (req, res) => {
         const entrega = entregaResult.data;
 
         // registra no logger
-        const logResult = await axios.post(`${LOGGER_SERVICE}/logs`, {
+        const logResult = await axios.post(`${LOGGER_SERVICE}/logger`, {
             cpf: cpf,
             locker: entrega.locker,
             numero_gaveta: entrega.numero_gaveta,
-            data_entrega: entrega.data_entrega,
-            data_recolhimento: new Date().toISOString()
+            data_retirada: new Date().toISOString()
         },
             { validateStatus: () => true }
         );
@@ -216,7 +215,7 @@ app.get('/admin/condominos', async (req, res) => {
 //admin ve histórico de entregas
 app.get('/admin/logs', async (req, res) => {
     try {
-        const result = await axios.get(`${LOGGER_SERVICE}/logs`,
+        const result = await axios.get(`${LOGGER_SERVICE}/logger`,
             { validateStatus: () => true }
         );
         res.status(result.status).json(result.data || []);
@@ -231,7 +230,7 @@ app.get('/admin/logs/:cpf', async (req, res) => {
     const cpf = req.params.cpf;
 
     try {
-        const result = await axios.get(`${LOGGER_SERVICE}/logs/${cpf}`,
+        const result = await axios.get(`${LOGGER_SERVICE}/logger/${cpf}`,
             { validateStatus: () => true }
         );
         res.status(result.status).json(result.data);

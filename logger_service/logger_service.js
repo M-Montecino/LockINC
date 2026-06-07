@@ -7,8 +7,8 @@ const bodyParser = require('body-parser');
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({extended: true}));
 
-// Inicia o Servidor na porta 8090
-let porta = 8090;
+// Inicia o Servidor na porta 8000
+let porta = 8000;
 app.listen(porta, () => {
  console.log('Servidor em execução na porta: ' + porta);
 });
@@ -25,7 +25,9 @@ var db = new sqlite3.Database('./dados.db', (err) => {
 
 //DB
 db.run(`CREATE TABLE IF NOT EXISTS logger
-        (cpf numeric[11] PRIMARY KEY NOT NULL UNIQUE,
+        (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        cpf numeric[11] NOT NULL,
         locker INTEGER NOT NULL,
         numero_gaveta INTEGER NOT NULL,
         data_retirada DATETIME NOT NULL)`, 
@@ -41,7 +43,7 @@ app.post('/logger', async (req, res) => {
     const { cpf, locker, numero_gaveta, data_retirada } = req.body;
 
     if (!cpf || !locker || !numero_gaveta || !data_retirada) {
-        return res.status(400).send('Dados incompletos. Por favor, forneça CPF, locker, número da gaveta e data de entrega.');
+        return res.status(400).send('Dados incompletos. Por favor, forneça CPF, locker, número da gaveta e data de retirada.');
     }
     if (cpf.length !== 11) {
         return res.status(400).send('CPF deve conter exatamente 11 dígitos.');
@@ -76,12 +78,12 @@ app.get('/logger/:cpf', async (req, res) => {
     if (cpf.length !== 11) {
         return res.status(400).send('CPF deve conter exatamente 11 dígitos.');
      }
-    db.get('SELECT * FROM logger WHERE cpf = ?', [cpf], (err, row) => {
+    db.all('SELECT * FROM logger WHERE cpf = ?', [cpf], (err, row) => {
         if (err) {
             console.log(err);
             return res.status(500).send('Erro ao buscar entrega.');
         }
-        if (!row) {
+        if (!row || row.length === 0) {
             return res.status(404).send('Entrega não encontrada para o CPF fornecido.');
         }
         res.status(200).json(row);

@@ -37,9 +37,10 @@ db.run(`CREATE TABLE IF NOT EXISTS lockers
       });
 
 db.run(`CREATE TABLE IF NOT EXISTS gavetas(
-            numero INTEGER PRIMARY KEY AUTOINCREMENT,
             locker INTEGER NOT NULL,
+            numero INTEGER NOT NULL,
             tamanho TEXT NOT NULL CHECK(tamanho IN ('P', 'M', 'G', 'GG')),
+            PRIMARY KEY(locker, numero),
             FOREIGN KEY(locker) REFERENCES lockers(codigo)
         )`,
     [], (err) => {
@@ -68,35 +69,38 @@ app.post('/lockers', async (req, res) => {
         [cep, numero_cep, complemento, codigo],
         (err) => {
             if (err) {
+                if (err.code === 'SQLITE_CONSTRAINT') {
+                    return res.status(400).send('O código do locker deve ser único.');
+                }
                 console.log(err);
                 return res.status(500).send('Erro ao cadastrar locker.');
             }
-
+            let gavetaNumero = 1;
             for (let i = 0; i < gavetas.P; i++) {
                 db.run(
-                    'INSERT INTO gavetas(locker, tamanho) VALUES (?, ?)',
-                    [codigo, 'P']
+                    'INSERT INTO gavetas(locker, tamanho, numero) VALUES (?, ?, ?)',
+                    [codigo, 'P', gavetaNumero++] 
                 );
             }
 
             for (let i = 0; i < gavetas.M; i++) {
                 db.run(
-                    'INSERT INTO gavetas(locker, tamanho) VALUES (?, ?)',
-                    [codigo, 'M']
+                    'INSERT INTO gavetas(locker, tamanho, numero) VALUES (?, ?, ?)',
+                    [codigo, 'M', gavetaNumero++] 
                 );
             }
 
             for (let i = 0; i < gavetas.G; i++) {
                 db.run(
-                    'INSERT INTO gavetas(locker, tamanho) VALUES (?, ?)',
-                    [codigo, 'G']
+                    'INSERT INTO gavetas(locker, tamanho, numero) VALUES (?, ?, ?)',
+                    [codigo, 'G', gavetaNumero++] 
                 );
             }
 
             for (let i = 0; i < gavetas.GG; i++) {
                 db.run(
-                    'INSERT INTO gavetas(locker, tamanho) VALUES (?, ?)',
-                    [codigo, 'GG']
+                    'INSERT INTO gavetas(locker, tamanho, numero) VALUES (?, ?, ?)',
+                    [codigo, 'GG', gavetaNumero++] 
                 );
             }
 
