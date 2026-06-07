@@ -82,18 +82,18 @@ app.get('/condomino/:cpf/gavetas', async (req, res) => {
             return res.status(200).json([]);
         }
 
-        const entrega = entregasResult.data;
-        // busca lockers e gavetas para cada entrega
-        const gavetasResult = await axios.get(`${LOCKER_SERVICE}/lockers/${entrega.locker}/gavetas`,
-            { validateStatus: () => true }
-        );
+        const entregas = Array.isArray(entregasResult.data) ? entregasResult.data : [entregasResult.data];
         
-        res.status(200).json({
+        // monta resposta com todas as gavetas ocupadas
+        const gavetas = entregas.map(entrega => ({
             cpf: cpf,
             locker: entrega.locker,
             numero_gaveta: entrega.numero_gaveta,
-            data_entrega: entrega.data_entrega
-        });
+            data_entrega: entrega.data_entrega,
+            id: entrega.id
+        }));
+        
+        res.status(200).json(gavetas);
     } catch (err) {
         console.log(err);
         res.status(500).send('Erro ao buscar gavetas.');
@@ -103,9 +103,14 @@ app.get('/condomino/:cpf/gavetas', async (req, res) => {
 // condômino recolhe entrega
 app.delete('/condomino/:cpf/recolher', async (req, res) => {
     const cpf = req.params.cpf;
+    const { numero_gaveta } = req.body;
 
     if (cpf.length !== 11) {
         return res.status(400).send('CPF deve conter exatamente 11 dígitos.');
+    }
+    
+    if (!numero_gaveta) {
+        return res.status(400).send('Número da gaveta é obrigatório.');
     }
 
     try {
@@ -117,8 +122,14 @@ app.delete('/condomino/:cpf/recolher', async (req, res) => {
         if (entregaResult.status === 404) {
             return res.status(404).send('Entrega não encontrada.');
         }
-
-        const entrega = entregaResult.data;
+        
+        // procura a entrega com a gaveta informada
+        const entregas = Array.isArray(entregaResult.data) ? entregaResult.data : [entregaResult.data];
+        const entrega = entregas.find(e => e.numero_gaveta === numero_gaveta);
+        
+        if (!entrega) {
+            return res.status(404).send('Entrega não encontrada para a gaveta fornecida.');
+        }
 
         // registra no logger
         const logResult = await axios.post(`${LOGGER_SERVICE}/logger`, {
@@ -134,9 +145,9 @@ app.delete('/condomino/:cpf/recolher', async (req, res) => {
             return res.status(500).send('Erro ao registrar no histórico.');
         }
 
-        // deleta de entregas
+        // deleta a entrega específica
         const deleteResult = await axios.delete(`${ENTREGA_SERVICE}/entregas/${cpf}`,
-            { validateStatus: () => true }
+            { data: { numero_gaveta: numero_gaveta }, validateStatus: () => true }
         );
         
         res.status(deleteResult.status).send('Entrega recolhida com sucesso e registrada no histórico.');

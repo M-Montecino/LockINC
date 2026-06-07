@@ -54,11 +54,11 @@ async function run() {
     {
       name: 'POST /admin/lockers',
       fn: () => requestJson('POST', '/admin/lockers', {
-        codigo: 1234,
+        codigo: 1001,
         cep: '88040480',
         numero_cep: 12345,
         complemento: 'Bloco A',
-        gavetas: { P: 1, M: 1, G: 0, GG: 0 },
+        gavetas: { P: 2, M: 2, G: 1, GG: 1 },
       }),
     },
     {
@@ -73,11 +73,20 @@ async function run() {
       }),
     },
     {
-      name: 'POST /entregador/entregar',
+      name: 'POST /entregador/entregar (1ª entrega)',
       fn: () => requestJson('POST', '/entregador/entregar', {
         cpf: testCpf,
-        locker: 123,
+        locker: 1001,
         numero_gaveta: 1,
+        data_entrega: new Date().toISOString(),
+      }),
+    },
+    {
+      name: 'POST /entregador/entregar (2ª entrega)',
+      fn: () => requestJson('POST', '/entregador/entregar', {
+        cpf: testCpf,
+        locker: 1001,
+        numero_gaveta: 2,
         data_entrega: new Date().toISOString(),
       }),
     },
@@ -90,8 +99,20 @@ async function run() {
       fn: () => requestJson('GET', `/condomino/${testCpf}/gavetas`),
     },
     {
-      name: 'DELETE /condomino/:cpf/recolher',
-      fn: () => requestJson('DELETE', `/condomino/${testCpf}/recolher`),
+      name: 'DELETE /condomino/:cpf/recolher (gaveta 1)',
+      fn: () => requestJson('DELETE', `/condomino/${testCpf}/recolher`, {
+        numero_gaveta: 1,
+      }),
+    },
+    {
+      name: 'GET /condomino/:cpf/entregas (após recolher)',
+      fn: () => requestJson('GET', `/condomino/${testCpf}/entregas`),
+    },
+    {
+      name: 'DELETE /condomino/:cpf/recolher (gaveta 2)',
+      fn: () => requestJson('DELETE', `/condomino/${testCpf}/recolher`, {
+        numero_gaveta: 2,
+      }),
     },
     {
       name: 'GET /admin/logs/:cpf',

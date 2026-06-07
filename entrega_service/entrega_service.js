@@ -29,7 +29,7 @@ var db = new sqlite3.Database('./dados.db', (err) => {
 //DB
 db.run(`CREATE TABLE IF NOT EXISTS entregas
         (id INTEGER PRIMARY KEY AUTOINCREMENT,
-        cpf numeric[11] NOT NULL UNIQUE,
+        cpf numeric[11] NOT NULL,
         locker INTEGER NOT NULL,
         numero_gaveta INTEGER NOT NULL,
         data_entrega DATETIME NOT NULL)`, 
@@ -80,32 +80,38 @@ app.get('/entregas/:cpf', async (req, res) => {
     if (cpf.length !== 11) {
         return res.status(400).send('CPF deve conter exatamente 11 dígitos.');
      }
-    db.get('SELECT * FROM entregas WHERE cpf = ?', [cpf], (err, row) => {
+    db.all('SELECT * FROM entregas WHERE cpf = ?', [cpf], (err, rows) => {
         if (err) {
             console.log(err);
             return res.status(500).send('Erro ao buscar entrega.');
         }
-        if (!row) {
+        if (!rows || rows.length === 0) {
             return res.status(404).send('Entrega não encontrada para o CPF fornecido.');
         }
-        res.status(200).json(row);
+        res.status(200).json(rows);
     });
 });
 
 // DELETE
 app.delete('/entregas/:cpf', async (req, res) => {
     const cpf = req.params.cpf;
+    const { numero_gaveta } = req.body;
+    
     if (cpf.length !== 11) {
         return res.status(400).send('CPF deve conter exatamente 11 dígitos.');
-     }
+    }
+    
+    if (!numero_gaveta) {
+        return res.status(400).send('Número da gaveta é obrigatório no body.');
+    }
 
-    db.get('SELECT * FROM entregas WHERE cpf = ?', [cpf], (err, row) => {
+    db.get('SELECT * FROM entregas WHERE cpf = ? AND numero_gaveta = ?', [cpf, numero_gaveta], (err, row) => {
         if (err) {
             console.log(err);
             return res.status(500).send('Erro ao buscar entrega.');
         }
         if (!row) {
-            return res.status(404).send('Entrega não encontrada para o CPF fornecido.');
+            return res.status(404).send('Entrega não encontrada para o CPF e gaveta fornecidos.');
         }
 
         (async () => {
@@ -125,13 +131,13 @@ app.delete('/entregas/:cpf', async (req, res) => {
                 return res.status(500).send('Erro ao abrir gaveta.');
             }
 
-            db.run('DELETE FROM entregas WHERE cpf = ?', [cpf], function(deleteErr) {
+            db.run('DELETE FROM entregas WHERE cpf = ? AND numero_gaveta = ?', [cpf, numero_gaveta], function(deleteErr) {
                 if (deleteErr) {
                     console.log(deleteErr);
                     return res.status(500).send('Erro ao deletar entrega.');
                 }
                 if (this.changes === 0) {
-                    return res.status(404).send('Entrega não encontrada para o CPF fornecido.');
+                    return res.status(404).send('Entrega não encontrada para o CPF e gaveta fornecidos.');
                 }
                 res.status(200).send('Entrega deletada com sucesso.');
             });
